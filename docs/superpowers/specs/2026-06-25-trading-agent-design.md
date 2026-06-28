@@ -1,6 +1,7 @@
 # Trading Agent — Design Spec
 
 **Date:** 2026-06-25  
+**Updated:** 2026-06-28  
 **Status:** Draft
 
 ---
@@ -45,9 +46,9 @@ The agent runs as a **LangGraph state machine** triggered on a fixed cadence (ev
 
 | File | Responsibility |
 |---|---|
-| `agents/technical.py` | Fetches intraday OHLCV bars from Polygon.io and historical context from yfinance. Computes RSI, MACD, and moving averages via `pandas-ta`. Returns a `TechnicalSignal`. |
-| `agents/fundamental.py` | Pulls P/E, EPS, revenue growth, and debt ratios from Financial Modeling Prep (free tier). Caches output daily — fundamentals do not change intraday. Returns a `FundamentalSignal`. |
-| `agents/news.py` | Fetches recent headlines and article summaries for a ticker from Polygon.io news. LLM scores sentiment and flags material events (earnings, guidance, macro). Returns a `NewsSignal`. |
+| `agents/technical.py` | Fetches intraday OHLCV bars and real-time quotes via `robin_stocks` (Robinhood). Computes RSI, MACD, and moving averages via `pandas-ta`. Returns a `TechnicalSignal`. |
+| `agents/fundamental.py` | Pulls P/E, P/B, market cap, and 52-week range via `robin_stocks` (Robinhood fundamentals endpoint). Caches output daily — fundamentals do not change intraday. Returns a `FundamentalSignal`. |
+| `agents/news.py` | Fetches recent headlines and article summaries for a ticker from Polygon.io news (news-only usage). LLM scores sentiment and flags material events (earnings, guidance, macro). Returns a `NewsSignal`. |
 | `agents/supervisor.py` | Receives all three signals. Constructs a synthesis prompt and calls the LLM to produce a `TradeDecision` (action, ticker, size, rationale). |
 
 ### Broker Layer (`broker/`)
@@ -88,7 +89,10 @@ class FundamentalSignal(BaseModel):
     direction: Literal["bullish", "bearish", "neutral"]
     confidence: float
     pe_ratio: float | None
-    revenue_growth_yoy: float | None
+    pb_ratio: float | None
+    market_cap: float | None
+    week_52_high: float | None
+    week_52_low: float | None
     reasoning: str
 
 class NewsSignal(BaseModel):
@@ -148,6 +152,17 @@ Each analyzer and the supervisor use `with_structured_output` to enforce Pydanti
 
 ---
 
+## Data Sources
+
+| Source | Library | Provides | API key required |
+|---|---|---|---|
+| Robinhood | `robin_stocks` | Real-time quotes, intraday OHLCV bars, fundamentals (PE, P/B, market cap, 52-wk range) | No (uses Robinhood login credentials) |
+| Polygon.io | `requests` | News headlines + article summaries | Yes (free tier sufficient) |
+
+> **Note on Robinhood MCP:** The `mcp__claude_ai_Robinhood__*` tools available in Claude Code sessions expose the same Robinhood data. They are Claude Code-managed and cannot be called directly from the standalone Python agent. `robin_stocks` is the equivalent Python interface for production use.
+
+---
+
 ## Environment Variables
 
 ```
@@ -155,8 +170,9 @@ ANTHROPIC_API_KEY         # LLM calls
 ALPACA_API_KEY            # Alpaca paper trading
 ALPACA_SECRET_KEY
 ALPACA_BASE_URL           # https://paper-api.alpaca.markets
-POLYGON_API_KEY           # Real-time market data + news
-FMP_API_KEY               # Financial Modeling Prep (fundamentals)
+ROBINHOOD_USERNAME        # Robinhood login (robin_stocks auth)
+ROBINHOOD_PASSWORD
+POLYGON_API_KEY           # News only
 LANGSMITH_API_KEY         # Optional: LangSmith tracing
 LANGSMITH_PROJECT         # Optional: project name in LangSmith
 ```
