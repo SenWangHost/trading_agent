@@ -59,7 +59,8 @@ The broker layer is an **abstract interface** so the execution backend can be sw
 |---|---|
 | `broker/base.py` | Abstract base class defining `get_positions()`, `place_order()`, `get_portfolio_value()`. |
 | `broker/alpaca.py` | Alpaca paper trading implementation using `alpaca-trade-api`. Active for initial development. |
-| `broker/ibkr.py` | IBKR implementation (stubbed initially). Will use IBKR Client Portal API or TWS API once activated. |
+| `broker/robinhood.py` | Robinhood live trading implementation using `robin_stocks`. Stubbed initially — activating this places real orders on the real account. |
+| `broker/ibkr.py` | IBKR live trading implementation (stubbed initially). Will use IBKR Client Portal API or TWS API once activated. |
 
 ### Core (`state.py`, `graph.py`, `scheduler.py`)
 
@@ -191,7 +192,8 @@ trading_agent/
 ├── broker/
 │   ├── base.py
 │   ├── alpaca.py
-│   └── ibkr.py           # stubbed
+│   ├── robinhood.py      # stubbed — real orders
+│   └── ibkr.py          # stubbed — real orders
 ├── logs/
 │   └── decisions.jsonl
 ├── docs/
@@ -220,11 +222,14 @@ trading_agent/
 
 ---
 
-## Migration Path to IBKR
+## Execution Phase Roadmap
 
-When ready to switch from Alpaca to IBKR:
+| Phase | Broker | Notes |
+|---|---|---|
+| Paper trading | Alpaca | Full sandbox, no real money. Active now. |
+| Live — Robinhood | `robin_stocks` | Uses existing Robinhood account. **Real orders, real money.** `robin_stocks` already used for data, so no new auth needed. |
+| Live — IBKR | `ib_insync` / Client Portal API | Uses existing IBKR account. More robust for large position sizes and advanced order types. |
 
-1. Implement `broker/ibkr.py` using IBKR Client Portal API (REST) or TWS API (`ib_insync`).
-2. Update `broker` instantiation in `graph.py` to use `IBKRBroker`.
-3. Set IBKR credentials in `.env`.
-4. No changes needed in any agent or supervisor code.
+To switch execution backend, update the `broker` instantiation in `graph.py` — no changes needed in any agent or supervisor code.
+
+> **Warning:** `broker/robinhood.py` and `broker/ibkr.py` place real orders. Never activate them until the paper trading phase is complete and the strategy is validated.
