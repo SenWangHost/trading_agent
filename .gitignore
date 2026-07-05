@@ -9,9 +9,6 @@ __pycache__/
 venv/
 env/
 
-# uv
-uv.lock
-
 # Distribution / packaging
 *.egg-info/
 dist/
