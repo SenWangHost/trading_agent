@@ -1,5 +1,12 @@
 from unittest.mock import MagicMock, patch
-from state import AgentState, TechnicalSignal, FundamentalSignal, NewsSignal, TradeDecision
+from state import AgentState, PortfolioPosition, TechnicalSignal, FundamentalSignal, NewsSignal, TradeDecision
+
+
+def _make_position(ticker: str = "AAPL") -> PortfolioPosition:
+    return PortfolioPosition(
+        ticker=ticker, quantity=10.0, average_buy_price=170.0,
+        current_value=1950.0, equity_change_pct=14.71,
+    )
 
 
 def _make_state_with_signals() -> AgentState:
@@ -20,12 +27,14 @@ def _make_state_with_signals() -> AgentState:
     return AgentState(
         tickers=["AAPL"],
         current_ticker="",
+        portfolio_positions={"AAPL": _make_position()},
         prices={"AAPL": 195.0},
         technical_signals={"AAPL": tech},
         fundamental_signals={"AAPL": fund},
         news_signals={"AAPL": news},
         decisions=[],
         cycle_timestamp="2026-06-28T10:00:00",
+        report="",
     )
 
 
@@ -65,12 +74,14 @@ def test_run_supervisor_handles_missing_signals():
     state = AgentState(
         tickers=["AAPL"],
         current_ticker="",
+        portfolio_positions={},
         prices={},
         technical_signals={},
         fundamental_signals={},
         news_signals={},
         decisions=[],
         cycle_timestamp="2026-06-28T10:00:00",
+        report="",
     )
     fake_decision = TradeDecision(
         ticker="AAPL", action="hold", size_pct=0.0, rationale="Insufficient data",
@@ -85,3 +96,24 @@ def test_run_supervisor_handles_missing_signals():
         result = run_supervisor(state)
 
     assert result["decisions"][0].action == "hold"
+
+
+def test_run_supervisor_includes_position_context_in_prompt():
+    """Verify that position data (avg cost, P&L) reaches the LLM prompt."""
+    fake_decision = TradeDecision(ticker="AAPL", action="hold", size_pct=0.0, rationale="ok")
+
+    with patch("agents.supervisor.ChatAnthropic") as MockLLM:
+        mock_llm_instance = MagicMock()
+        structured = mock_llm_instance.with_structured_output.return_value
+        structured.invoke.return_value = fake_decision
+        MockLLM.return_value = mock_llm_instance
+
+        from agents.supervisor import run_supervisor
+        run_supervisor(_make_state_with_signals())
+
+        prompt_arg = structured.invoke.call_args[0][0]
+
+    assert "170.00" in prompt_arg   # avg cost
+    assert "1950.00" in prompt_arg  # current value
+    assert "+14.71%" in prompt_arg  # P&L
+    assert "Robinhood portfolio" in prompt_arg

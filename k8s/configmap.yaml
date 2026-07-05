@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trading-agent-config
+  namespace: trading-agent
+data:
+  ALPACA_BASE_URL: "https://paper-api.alpaca.markets"
+  WATCHLIST: "AAPL,MSFT,NVDA"
+  SCANNER_ENABLED: "true"
+  SCANNER_SECTORS: "semiconductors"
+  SCANNER_MAX_RESULTS: "5"
+  SCANNER_MIN_PRICE: "10"
+  SCANNER_MIN_VOLUME: "1000000"
+  LANGCHAIN_TRACING_V2: "false"

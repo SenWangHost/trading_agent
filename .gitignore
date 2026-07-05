@@ -19,9 +19,10 @@ build/
 
 # Environment variables
 .env
+.env.*
 
 # Logs
-logs/*.jsonl
+logs
 
 # pytest
 .pytest_cache/

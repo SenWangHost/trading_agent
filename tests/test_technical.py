@@ -1,45 +1,63 @@
+import os
 from unittest.mock import MagicMock, patch
+
 from state import AgentState, TechnicalSignal
+
+os.environ.setdefault("POLYGON_API_KEY", "test_polygon_key")
 
 
 def _make_state(ticker: str = "AAPL") -> AgentState:
     return AgentState(
         tickers=[ticker],
         current_ticker=ticker,
+        portfolio_positions={},
         prices={},
         technical_signals={},
         fundamental_signals={},
         news_signals={},
         decisions=[],
         cycle_timestamp="2026-06-28T10:00:00",
+        report="",
     )
 
 
-FAKE_HISTORICALS = [
-    {"close_price": str(190 + i), "open_price": "189", "high_price": "192",
-     "low_price": "188", "volume": "1000000", "begins_at": f"2026-06-28T{9+i//12:02d}:{(i*5)%60:02d}:00Z"}
-    for i in range(60)
-]
+def _make_bars_response(n: int = 60) -> dict:
+    return {
+        "status": "OK",
+        "results": [
+            {
+                "c": 190.0 + i * 0.1,
+                "o": 189.5 + i * 0.1,
+                "h": 191.0 + i * 0.1,
+                "l": 189.0 + i * 0.1,
+                "v": 1_000_000,
+                "t": 1700000000000 + i * 300_000,
+            }
+            for i in range(n)
+        ],
+    }
+
+
+def _mock_get(json_data: dict) -> MagicMock:
+    resp = MagicMock()
+    resp.raise_for_status = MagicMock()
+    resp.json.return_value = json_data
+    return resp
 
 
 def test_run_technical_returns_signal():
     fake_signal = TechnicalSignal(
-        ticker="AAPL",
-        direction="bullish",
-        confidence=0.75,
-        rsi=48.0,
-        macd_signal="bullish",
-        current_price=195.0,
+        ticker="AAPL", direction="bullish", confidence=0.75,
+        rsi=48.0, macd_signal="bullish", current_price=195.0,
         reasoning="RSI neutral, MACD bullish crossover",
     )
 
-    with patch("agents.technical.rh") as mock_rh, \
+    with patch("polygon_client.requests.get", return_value=_mock_get(_make_bars_response())), \
          patch("agents.technical.ChatAnthropic") as MockLLM:
-        mock_rh.stocks.get_stock_historicals.return_value = FAKE_HISTORICALS
 
-        mock_llm_instance = MagicMock()
-        mock_llm_instance.with_structured_output.return_value.invoke.return_value = fake_signal
-        MockLLM.return_value = mock_llm_instance
+        mock_llm = MagicMock()
+        mock_llm.with_structured_output.return_value.invoke.return_value = fake_signal
+        MockLLM.return_value = mock_llm
 
         from agents.technical import run_technical
         result = run_technical(_make_state())
@@ -52,9 +70,9 @@ def test_run_technical_returns_signal():
 
 
 def test_run_technical_returns_neutral_on_api_failure():
-    with patch("agents.technical.rh") as mock_rh, \
+    with patch("polygon_client.requests.get") as mock_get, \
          patch("agents.technical.ChatAnthropic"):
-        mock_rh.stocks.get_stock_historicals.side_effect = Exception("API down")
+        mock_get.side_effect = Exception("API down")
 
         from agents.technical import run_technical
         result = run_technical(_make_state())

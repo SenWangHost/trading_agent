@@ -1,0 +1,49 @@
+# Runs "python main.py once" at 9:30 AM ET every weekday.
+# timeZone field requires Kubernetes >= 1.27 (supported on GKE, DOKS, AKS, EKS).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: trading-agent
+  namespace: trading-agent
+spec:
+  schedule: "30 9 * * 1-5"
+  timeZone: "America/New_York"
+  concurrencyPolicy: Forbid          # skip if previous run is still going
+  successfulJobsHistoryLimit: 5
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2                # retry up to 2× on failure before marking failed
+      activeDeadlineSeconds: 3600    # kill job if it runs longer than 1 hour
+      template:
+        metadata:
+          labels:
+            app: trading-agent
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: trading-agent
+              # Replace with your image: gcr.io/<project>/trading-agent:latest
+              # or docker.io/<user>/trading-agent:latest
+              image: trading-agent:latest
+              imagePullPolicy: Always
+              command: ["uv", "run", "python", "main.py", "once"]
+              envFrom:
+                - configMapRef:
+                    name: trading-agent-config
+                - secretRef:
+                    name: trading-agent-secrets
+              resources:
+                requests:
+                  memory: "512Mi"
+                  cpu: "250m"
+                limits:
+                  memory: "1Gi"
+                  cpu: "500m"
+              volumeMounts:
+                - name: logs
+                  mountPath: /app/logs
+          volumes:
+            - name: logs
+              persistentVolumeClaim:
+                claimName: trading-agent-logs

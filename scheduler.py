@@ -1,42 +1,111 @@
 import datetime
 import json
+import logging
 import os
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
+from alpaca.trading.client import TradingClient
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from broker.alpaca import AlpacaBroker
 from graph import build_graph
-from state import AgentState
+from scanner.polygon import scan_candidates
+from state import AgentState, PortfolioPosition
+
+log = logging.getLogger(__name__)
 
 
-def run_cycle(tickers: list[str], graph) -> None:
+def _fetch_alpaca_positions() -> dict[str, PortfolioPosition]:
+    client = TradingClient(
+        api_key=os.environ["ALPACA_API_KEY"],
+        secret_key=os.environ["ALPACA_SECRET_KEY"],
+        paper=True,
+    )
+    positions: dict[str, PortfolioPosition] = {}
+    try:
+        for p in client.get_all_positions():
+            try:
+                positions[p.symbol] = PortfolioPosition(
+                    ticker=p.symbol,
+                    quantity=float(p.qty),
+                    average_buy_price=float(p.avg_entry_price),
+                    current_value=float(p.market_value),
+                    equity_change_pct=float(p.unrealized_plpc) * 100,
+                )
+            except (ValueError, TypeError):
+                pass
+    except Exception:
+        pass
+    return positions
+
+
+def _build_watchlist() -> list[str]:
+    manual = [t.strip() for t in os.environ.get("WATCHLIST", "AAPL,MSFT,NVDA").split(",")]
+    if os.environ.get("SCANNER_ENABLED", "false").lower() != "true":
+        return manual
+
+    try:
+        scanned = scan_candidates()
+    except Exception as e:
+        log.warning("scanner failed, using manual watchlist only: %s", e)
+        return manual
+
+    seen = set(manual)
+    extra = [t for t in scanned if t not in seen]
+    if extra:
+        log.info("scanner added %d tickers: %s", len(extra), ", ".join(extra))
+    return manual + extra
+
+
+def run_cycle(graph) -> None:
     now = datetime.datetime.utcnow()
-    print(f"\n[{now.isoformat()}] Starting cycle for: {', '.join(tickers)}")
+
+    watchlist = _build_watchlist()
+    portfolio_positions = _fetch_alpaca_positions()
+
+    held = [t for t in watchlist if t in portfolio_positions]
+    log.info("cycle start | %d tickers: %s", len(watchlist), ", ".join(watchlist))
+    if held:
+        log.info("positions held in Alpaca: %s", ", ".join(held))
+    else:
+        log.info("no positions currently held")
 
     initial_state: AgentState = {
-        "tickers": tickers,
+        "tickers": watchlist,
         "current_ticker": "",
+        "portfolio_positions": portfolio_positions,
         "prices": {},
         "technical_signals": {},
         "fundamental_signals": {},
         "news_signals": {},
         "decisions": [],
         "cycle_timestamp": now.isoformat(),
+        "report": "",
     }
 
     result = graph.invoke(initial_state)
     _log(result)
-    _print_summary(result)
+    _save_report(result)
+    log.info("cycle done | decisions: %s",
+             ", ".join(f"{d.ticker}={d.action}" for d in result["decisions"]))
+
+
+def _day_dir(base: str, date_str: str) -> Path:
+    """Return and create logs/<base>/<YYYY-MM-DD>/."""
+    path = Path(f"logs/{base}/{date_str}")
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def _log(state: AgentState) -> None:
-    log_path = Path("logs/decisions.jsonl")
-    log_path.parent.mkdir(exist_ok=True)
+    date_str = state["cycle_timestamp"][:10]          # YYYY-MM-DD
+    log_path = _day_dir("decisions", date_str) / "decisions.jsonl"
     entry = {
         "timestamp": state["cycle_timestamp"],
         "tickers": state["tickers"],
+        "portfolio_positions": {k: v.model_dump() for k, v in state["portfolio_positions"].items()},
         "technical_signals": {k: v.model_dump() for k, v in state["technical_signals"].items()},
         "fundamental_signals": {k: v.model_dump() for k, v in state["fundamental_signals"].items()},
         "news_signals": {k: v.model_dump() for k, v in state["news_signals"].items()},
@@ -46,38 +115,87 @@ def _log(state: AgentState) -> None:
         f.write(json.dumps(entry) + "\n")
 
 
-def _print_summary(state: AgentState) -> None:
-    print(f"{'─' * 60}")
-    for d in state["decisions"]:
-        tech = state["technical_signals"].get(d.ticker)
-        fund = state["fundamental_signals"].get(d.ticker)
-        news = state["news_signals"].get(d.ticker)
-        print(
-            f"  {d.ticker:6s} → {d.action.upper():4s} {d.size_pct:.1f}%"
-            f" | tech={tech.direction if tech else '?'}"
-            f" | fund={fund.direction if fund else '?'}"
-            f" | news={news.direction if news else '?'}"
-        )
-        print(f"         rationale: {d.rationale[:100]}")
-    print(f"{'─' * 60}")
+def _save_report(state: AgentState) -> None:
+    report = state.get("report", "")
+    if not report:
+        return
+
+    print(report)
+
+    # e.g. "2026-07-04T09-30-00" → date_str="2026-07-04", time_str="09-30-00"
+    ts_safe = state["cycle_timestamp"].replace(":", "-")[:19]
+    date_str = ts_safe[:10]
+    time_str = ts_safe[11:]
+    report_path = _day_dir("reports", date_str) / f"{time_str}.md"
+    report_path.write_text(report)
+    log.info("report saved → %s", report_path)
 
 
-def start_scheduler(tickers: list[str]) -> None:
+def _build_graph():
     broker = AlpacaBroker(
         api_key=os.environ["ALPACA_API_KEY"],
         secret_key=os.environ["ALPACA_SECRET_KEY"],
         paper=True,
     )
-    graph = build_graph(broker)
+    return build_graph(broker)
 
-    run_cycle(tickers, graph)
+
+def _in_trading_window() -> bool:
+    """Return True if current ET time falls in market or after-hours windows."""
+    now = datetime.datetime.now(tz=ZoneInfo("America/New_York"))
+    if now.weekday() >= 5:  # Saturday=5, Sunday=6
+        return False
+    t = now.time()
+    market = datetime.time(9, 0) <= t <= datetime.time(15, 30)
+    afterhrs = datetime.time(16, 0) <= t <= datetime.time(20, 0)
+    return market or afterhrs
+
+
+def run_once() -> None:
+    """Fetch portfolio, run one analysis cycle, print report, then return."""
+    run_cycle(_build_graph())
+
+
+def start_scheduler() -> None:
+    """Run immediately, then on two cadences (Mon–Fri ET):
+    - Market hours  09:00–15:30 : every 30 minutes
+    - After-hours   16:00–20:00 : every 60 minutes
+    """
+    graph = _build_graph()
+
+    if _in_trading_window():
+        run_cycle(graph)
+    else:
+        log.info("startup outside trading window — skipping initial cycle")
 
     scheduler = BlockingScheduler(timezone="America/New_York")
+
+    # Market hours: every 30 min, 09:00–15:30 ET
     scheduler.add_job(
         run_cycle,
-        CronTrigger(day_of_week="mon-fri", hour="9-15", minute="*/30",
-                    timezone="America/New_York"),
-        args=[tickers, graph],
+        CronTrigger(
+            day_of_week="mon-fri",
+            hour="9-15",
+            minute="*/30",
+            timezone="America/New_York",
+        ),
+        args=[graph],
     )
-    print(f"Scheduler running. Next cycle at market hours (Mon–Fri 9:00–15:30 ET).")
+
+    # After-hours: every 60 min, 16:00–20:00 ET
+    scheduler.add_job(
+        run_cycle,
+        CronTrigger(
+            day_of_week="mon-fri",
+            hour="16-20",
+            minute="0",
+            timezone="America/New_York",
+        ),
+        args=[graph],
+    )
+
+    log.info(
+        "scheduler running — market hours every 30 min (09:00–15:30 ET), "
+        "after-hours every 60 min (16:00–20:00 ET)"
+    )
     scheduler.start()

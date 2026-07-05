@@ -1,0 +1,11 @@
+services:
+  trading-agent:
+    image: trading-agent:latest
+    command: schedule
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - logs:/app/logs
+
+volumes:
+  logs:

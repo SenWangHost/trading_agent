@@ -2,6 +2,56 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+---
+
+## Post-Implementation Changes (2026-07-04)
+
+The following changes were made after the initial implementation was complete. The task steps below reflect the original plan; this section records what diverged.
+
+### Data sources — full switch to Alpaca + yfinance
+
+- **Removed:** `robin_stocks` (Robinhood authentication was broken with the unofficial API)
+- **Technical data:** `robin_stocks` → `alpaca-py` `StockHistoricalDataClient` (5-min bars, `close` column instead of `close_price`)
+- **Fundamental data:** `robin_stocks` → `yfinance` (`trailingPE`, `priceToBook`, `fiftyTwoWeekHigh/Low`, etc.)
+- **News:** Polygon.io → `alpaca-py` `NewsClient` (same API key as trading; `headline`/`summary` fields instead of `title`/`description`)
+- **Dependency change:** removed `robin-stocks`, removed `requests`, added `yfinance>=0.2`
+
+### Portfolio source — Alpaca positions + WATCHLIST
+
+- Tickers come from `WATCHLIST` env var (Alpaca paper account starts empty)
+- Alpaca positions fetched via `TradingClient.get_all_positions()` each cycle; stored as `PortfolioPosition` objects in state
+- When positions exist they appear in the report with P&L; when empty the report shows "No position held"
+
+### Report mode instead of trade execution
+
+- Graph terminal node changed from `trade_executor` → `report_generator`
+- `execute_trades` function kept intact in `graph.py` with a comment showing how to re-enable
+- Every cycle saves a markdown report to `logs/reports/<timestamp>.md`
+- `AgentState` gained two new fields: `portfolio_positions: dict[str, PortfolioPosition]` and `report: str`
+
+### Supervisor prompt updated for real portfolio
+
+- Prompt changed from "paper trading account" framing to "real Robinhood portfolio" (now Alpaca portfolio)
+- Position context (shares held, avg cost, unrealized P&L) injected into every supervisor LLM call
+- `_build_prompt` now takes `pos: PortfolioPosition | None` as an additional parameter
+
+### CLI added to main.py
+
+- `main.py` now uses `argparse` with two subcommands: `once` and `schedule`
+- No Robinhood login; no watchlist reading at startup
+- `scheduler.py` exposes `run_once()` in addition to `start_scheduler()`
+
+### Python version bumped
+
+- `requires-python` changed from `>=3.10` to `>=3.12` (required by `pandas-ta 0.4.x`)
+
+### LLM instantiation fix (applied before initial implementation)
+
+- All agent code instantiates `ChatAnthropic` **inside** the agent function, not at module level
+- This is required for `unittest.mock.patch` to work — module-level `_llm` would be bound before the patch applies
+
+---
+
 **Goal:** Build an intraday LangGraph trading agent that analyzes stocks via technical, fundamental, and news signals and executes paper trades through Alpaca.
 
 **Architecture:** A LangGraph `StateGraph` runs every 30 minutes during market hours. A `dispatch` node fans out one `analyze_ticker` node per watchlist ticker (via `Send` API); each node runs all three analyzers sequentially. After all ticker nodes complete (fan-in), the `supervisor` node synthesizes signals into `TradeDecision` objects, and `trade_executor` submits them to the broker.

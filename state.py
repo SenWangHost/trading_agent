@@ -4,6 +4,14 @@ from typing import Annotated, Literal, TypedDict
 from pydantic import BaseModel
 
 
+class PortfolioPosition(BaseModel):
+    ticker: str
+    quantity: float
+    average_buy_price: float
+    current_value: float
+    equity_change_pct: float
+
+
 class TechnicalSignal(BaseModel):
     ticker: str
     direction: Literal["bullish", "bearish", "neutral"]
@@ -48,9 +56,11 @@ def _merge_dicts(a: dict, b: dict) -> dict:
 class AgentState(TypedDict):
     tickers: list[str]
     current_ticker: str
+    portfolio_positions: Annotated[dict[str, PortfolioPosition], _merge_dicts]
     prices: Annotated[dict[str, float], _merge_dicts]
     technical_signals: Annotated[dict[str, TechnicalSignal], _merge_dicts]
     fundamental_signals: Annotated[dict[str, FundamentalSignal], _merge_dicts]
     news_signals: Annotated[dict[str, NewsSignal], _merge_dicts]
     decisions: Annotated[list[TradeDecision], operator.add]
     cycle_timestamp: str
+    report: str
