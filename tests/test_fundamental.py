@@ -31,6 +31,7 @@ def _make_state(ticker: str = "AAPL") -> AgentState:
         tickers=[ticker],
         current_ticker=ticker,
         portfolio_positions={},
+        recent_orders=[],
         prices={},
         technical_signals={},
         fundamental_signals={},

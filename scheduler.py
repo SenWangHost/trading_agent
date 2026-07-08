@@ -6,13 +6,15 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from alpaca.trading.client import TradingClient
+from alpaca.trading.enums import QueryOrderStatus
+from alpaca.trading.requests import GetOrdersRequest
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from broker.alpaca import AlpacaBroker
 from graph import build_graph
 from scanner.polygon import scan_candidates
-from state import AgentState, PortfolioPosition
+from state import AgentState, PortfolioPosition, RecentOrder
 
 log = logging.getLogger(__name__)
 
@@ -41,6 +43,38 @@ def _fetch_alpaca_positions() -> dict[str, PortfolioPosition]:
     return positions
 
 
+def _fetch_recent_orders(days: int = 7) -> list[RecentOrder]:
+    client = TradingClient(
+        api_key=os.environ["ALPACA_API_KEY"],
+        secret_key=os.environ["ALPACA_SECRET_KEY"],
+        paper=True,
+    )
+    after = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
+    orders: list[RecentOrder] = []
+    try:
+        req = GetOrdersRequest(status=QueryOrderStatus.ALL, after=after, limit=500)
+        for o in client.get_orders(filter=req):
+            try:
+                orders.append(RecentOrder(
+                    order_id=str(o.id),
+                    ticker=o.symbol,
+                    action="buy" if str(o.side).lower().endswith("buy") else "sell",
+                    order_type=str(o.order_type).split(".")[-1].lower(),
+                    qty=float(o.qty or 0),
+                    filled_qty=float(o.filled_qty or 0),
+                    limit_price=float(o.limit_price) if o.limit_price else None,
+                    status=str(o.status).split(".")[-1].lower(),
+                    submitted_at=str(o.submitted_at),
+                    filled_at=str(o.filled_at) if o.filled_at else None,
+                ))
+            except (ValueError, TypeError):
+                pass
+    except Exception as e:
+        log.warning("failed to fetch recent orders: %s", e)
+    log.info("fetched %d recent orders (last %d days)", len(orders), days)
+    return orders
+
+
 def _build_watchlist() -> list[str]:
     manual = [t.strip() for t in os.environ.get("WATCHLIST", "AAPL,MSFT,NVDA").split(",")]
     if os.environ.get("SCANNER_ENABLED", "false").lower() != "true":
@@ -64,6 +98,7 @@ def run_cycle(graph) -> None:
 
     watchlist = _build_watchlist()
     portfolio_positions = _fetch_alpaca_positions()
+    recent_orders = _fetch_recent_orders()
 
     held = [t for t in watchlist if t in portfolio_positions]
     log.info("cycle start | %d tickers: %s", len(watchlist), ", ".join(watchlist))
@@ -76,6 +111,7 @@ def run_cycle(graph) -> None:
         "tickers": watchlist,
         "current_ticker": "",
         "portfolio_positions": portfolio_positions,
+        "recent_orders": recent_orders,
         "prices": {},
         "technical_signals": {},
         "fundamental_signals": {},
@@ -101,18 +137,23 @@ def _day_dir(base: str, date_str: str) -> Path:
 
 def _log(state: AgentState) -> None:
     date_str = state["cycle_timestamp"][:10]          # YYYY-MM-DD
-    log_path = _day_dir("decisions", date_str) / "decisions.jsonl"
+    log_path = _day_dir("decisions", date_str) / "decisions.json"
     entry = {
         "timestamp": state["cycle_timestamp"],
         "tickers": state["tickers"],
         "portfolio_positions": {k: v.model_dump() for k, v in state["portfolio_positions"].items()},
+        "recent_orders": [o.model_dump() for o in state["recent_orders"]],
         "technical_signals": {k: v.model_dump() for k, v in state["technical_signals"].items()},
         "fundamental_signals": {k: v.model_dump() for k, v in state["fundamental_signals"].items()},
         "news_signals": {k: v.model_dump() for k, v in state["news_signals"].items()},
         "decisions": [d.model_dump() for d in state["decisions"]],
     }
-    with log_path.open("a") as f:
-        f.write(json.dumps(entry) + "\n")
+    if log_path.exists():
+        cycles = json.loads(log_path.read_text())
+    else:
+        cycles = []
+    cycles.append(entry)
+    log_path.write_text(json.dumps(cycles, indent=2))
 
 
 def _save_report(state: AgentState) -> None:

@@ -54,6 +54,7 @@ def build_graph(broker: BaseBroker):
             fund = state["fundamental_signals"].get(ticker)
             news = state["news_signals"].get(ticker)
             price = state["prices"].get(ticker, 0.0)
+            ticker_orders = [o for o in state.get("recent_orders", []) if o.ticker == ticker]
 
             lines.append(f"## {ticker}")
             lines.append("")
@@ -88,9 +89,22 @@ def build_graph(broker: BaseBroker):
             else:
                 lines.append("- News: unavailable")
             lines.append("")
+            lines.append("**Recent Orders (7 days)**")
+            if ticker_orders:
+                for o in ticker_orders[:5]:
+                    price_tag = f" @ ${o.limit_price:.2f}" if o.limit_price else ""
+                    filled_tag = f", filled {o.filled_qty:.0f}/{o.qty:.0f}" if o.filled_qty > 0 else ""
+                    lines.append(f"- {o.submitted_at[:10]} {o.action.upper()} {o.qty:.0f}sh [{o.order_type}{price_tag}] → {o.status}{filled_tag}")
+            else:
+                lines.append("- None")
+            lines.append("")
             lines.append("**Recommendation**")
             lines.append(f"- Action: **{decision.action.upper()}**")
             lines.append(f"- Portfolio allocation: {decision.size_pct:.1f}%")
+            order_detail = decision.order_type.upper()
+            if decision.order_type == "limit" and decision.limit_price:
+                order_detail += f" @ ${decision.limit_price:.2f}"
+            lines.append(f"- Order: {order_detail}")
             lines.append(f"- Rationale: {decision.rationale}")
             lines.append("")
             lines.append("---")
@@ -131,8 +145,13 @@ def build_graph(broker: BaseBroker):
                     log.info("%s %s → skipped (qty < 1 at current price)", decision.ticker, decision.action)
                     continue
             try:
-                broker.place_order(decision.ticker, decision.action, float(qty))
-                log.info("%s %s %g shares → order submitted", decision.ticker, decision.action, qty)
+                broker.place_order(
+                    decision.ticker, decision.action, float(qty),
+                    decision.order_type, decision.limit_price,
+                )
+                price_tag = f" @ ${decision.limit_price:.2f}" if decision.limit_price else ""
+                log.info("%s %s %g shares [%s%s] → order submitted",
+                         decision.ticker, decision.action, qty, decision.order_type, price_tag)
             except Exception as e:
                 log.warning("%s %s → order failed: %s", decision.ticker, decision.action, e)
         log.info("execute_trades → done")

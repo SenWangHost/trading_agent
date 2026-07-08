@@ -1,6 +1,6 @@
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide, TimeInForce
-from alpaca.trading.requests import MarketOrderRequest
+from alpaca.trading.requests import LimitOrderRequest, MarketOrderRequest
 
 from broker.base import BaseBroker, OrderResult, Position
 
@@ -20,14 +20,30 @@ class AlpacaBroker(BaseBroker):
             for p in self.client.get_all_positions()
         ]
 
-    def place_order(self, ticker: str, action: str, qty: float) -> OrderResult:
+    def place_order(
+        self,
+        ticker: str,
+        action: str,
+        qty: float,
+        order_type: str = "market",
+        limit_price: float | None = None,
+    ) -> OrderResult:
         side = OrderSide.BUY if action == "buy" else OrderSide.SELL
-        req = MarketOrderRequest(
-            symbol=ticker,
-            qty=qty,
-            side=side,
-            time_in_force=TimeInForce.DAY,
-        )
+        if order_type == "limit" and limit_price is not None:
+            req = LimitOrderRequest(
+                symbol=ticker,
+                qty=qty,
+                side=side,
+                time_in_force=TimeInForce.DAY,
+                limit_price=round(limit_price, 2),
+            )
+        else:
+            req = MarketOrderRequest(
+                symbol=ticker,
+                qty=qty,
+                side=side,
+                time_in_force=TimeInForce.DAY,
+            )
         order = self.client.submit_order(req)
         return OrderResult(
             order_id=str(order.id),

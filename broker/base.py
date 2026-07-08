@@ -22,7 +22,14 @@ class BaseBroker(ABC):
     def get_positions(self) -> list[Position]: ...
 
     @abstractmethod
-    def place_order(self, ticker: str, action: str, qty: float) -> OrderResult: ...
+    def place_order(
+        self,
+        ticker: str,
+        action: str,
+        qty: float,
+        order_type: str = "market",
+        limit_price: float | None = None,
+    ) -> OrderResult: ...
 
     @abstractmethod
     def get_portfolio_value(self) -> float: ...

@@ -42,10 +42,25 @@ class NewsSignal(BaseModel):
     reasoning: str
 
 
+class RecentOrder(BaseModel):
+    order_id: str
+    ticker: str
+    action: str
+    order_type: str
+    qty: float
+    filled_qty: float
+    limit_price: float | None
+    status: str
+    submitted_at: str
+    filled_at: str | None
+
+
 class TradeDecision(BaseModel):
     ticker: str
     action: Literal["buy", "sell", "hold"]
     size_pct: float
+    order_type: Literal["market", "limit"] = "market"
+    limit_price: float | None = None  # set when order_type == "limit"
     rationale: str
 
 
@@ -57,6 +72,7 @@ class AgentState(TypedDict):
     tickers: list[str]
     current_ticker: str
     portfolio_positions: Annotated[dict[str, PortfolioPosition], _merge_dicts]
+    recent_orders: list[RecentOrder]
     prices: Annotated[dict[str, float], _merge_dicts]
     technical_signals: Annotated[dict[str, TechnicalSignal], _merge_dicts]
     fundamental_signals: Annotated[dict[str, FundamentalSignal], _merge_dicts]

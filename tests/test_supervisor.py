@@ -28,6 +28,7 @@ def _make_state_with_signals() -> AgentState:
         tickers=["AAPL"],
         current_ticker="",
         portfolio_positions={"AAPL": _make_position()},
+        recent_orders=[],
         prices={"AAPL": 195.0},
         technical_signals={"AAPL": tech},
         fundamental_signals={"AAPL": fund},
@@ -40,7 +41,9 @@ def _make_state_with_signals() -> AgentState:
 
 def test_run_supervisor_returns_decision():
     fake_decision = TradeDecision(
-        ticker="AAPL", action="buy", size_pct=5.0, rationale="All three signals bullish",
+        ticker="AAPL", action="buy", size_pct=5.0,
+        order_type="limit", limit_price=182.50,
+        rationale="All three signals bullish",
     )
 
     with patch("agents.supervisor.ChatAnthropic") as MockLLM:
@@ -75,6 +78,7 @@ def test_run_supervisor_handles_missing_signals():
         tickers=["AAPL"],
         current_ticker="",
         portfolio_positions={},
+        recent_orders=[],
         prices={},
         technical_signals={},
         fundamental_signals={},
@@ -116,4 +120,4 @@ def test_run_supervisor_includes_position_context_in_prompt():
     assert "170.00" in prompt_arg   # avg cost
     assert "1950.00" in prompt_arg  # current value
     assert "+14.71%" in prompt_arg  # P&L
-    assert "Robinhood portfolio" in prompt_arg
+    assert "swing trading supervisor" in prompt_arg

@@ -64,8 +64,10 @@ def test_news_signal_valid():
 
 
 def test_trade_decision_valid():
-    d = TradeDecision(ticker="AAPL", action="buy", size_pct=5.0, rationale="strong signals")
+    d = TradeDecision(ticker="AAPL", action="buy", size_pct=5.0, order_type="limit", limit_price=182.50, rationale="strong signals")
     assert d.action == "buy"
+    assert d.order_type == "limit"
+    assert d.limit_price == 182.50
 
 
 def test_trade_decision_rejects_bad_action():
