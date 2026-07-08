@@ -17,8 +17,8 @@ class StubBroker(BaseBroker):
     def get_positions(self) -> list[Position]:
         return []
 
-    def place_order(self, ticker: str, action: str, qty: float) -> OrderResult:
-        self.orders.append((ticker, action, qty))
+    def place_order(self, ticker: str, action: str, qty: float, order_type: str = "market", limit_price: float | None = None) -> OrderResult:
+        self.orders.append((ticker, action, qty, order_type, limit_price))
         return OrderResult(order_id="stub-1", ticker=ticker, action=action, qty=qty, status="filled")
 
     def get_portfolio_value(self) -> float:
@@ -101,7 +101,7 @@ def test_build_graph_returns_runnable():
 
 def test_graph_full_cycle_generates_report():
     tech, fund, news = _make_signals("AAPL")
-    buy_decision = TradeDecision(ticker="AAPL", action="buy", size_pct=5.0, rationale="all bullish")
+    buy_decision = TradeDecision(ticker="AAPL", action="buy", size_pct=5.0, order_type="limit", limit_price=182.50, rationale="all bullish")
 
     mock_yf_ticker = MagicMock()
     mock_yf_ticker.calendar = {
@@ -138,6 +138,7 @@ def test_graph_full_cycle_generates_report():
                     current_value=911.55, equity_change_pct=8.87,
                 )
             },
+            "recent_orders": [],
             "prices": {},
             "technical_signals": {},
             "fundamental_signals": {},

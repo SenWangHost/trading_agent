@@ -11,6 +11,7 @@ def _make_state(ticker: str = "AAPL") -> AgentState:
         tickers=[ticker],
         current_ticker=ticker,
         portfolio_positions={},
+        recent_orders=[],
         prices={},
         technical_signals={},
         fundamental_signals={},
@@ -48,11 +49,18 @@ def _mock_get(json_data: dict) -> MagicMock:
 def test_run_technical_returns_signal():
     fake_signal = TechnicalSignal(
         ticker="AAPL", direction="bullish", confidence=0.75,
-        rsi=48.0, macd_signal="bullish", current_price=195.0,
+        rsi=48.0, macd_signal="bullish", current_price=196.5,
         reasoning="RSI neutral, MACD bullish crossover",
     )
 
-    with patch("polygon_client.requests.get", return_value=_mock_get(_make_bars_response())), \
+    # First call: daily bars for indicators. Second call: latest minute bar (snapshot price).
+    snapshot_response = {"status": "OK", "results": [{"c": 196.5, "t": 1700000000000}]}
+    mock_get = MagicMock(side_effect=[
+        _mock_get(_make_bars_response()),
+        _mock_get(snapshot_response),
+    ])
+
+    with patch("polygon_client.requests.get", mock_get), \
          patch("agents.technical.ChatAnthropic") as MockLLM:
 
         mock_llm = MagicMock()
@@ -66,7 +74,7 @@ def test_run_technical_returns_signal():
     assert "AAPL" in result["technical_signals"]
     assert result["technical_signals"]["AAPL"].direction == "bullish"
     assert "prices" in result
-    assert result["prices"]["AAPL"] > 0
+    assert result["prices"]["AAPL"] == 196.5  # snapshot price, not prev close
 
 
 def test_run_technical_returns_neutral_on_api_failure():
