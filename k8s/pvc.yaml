@@ -1,0 +1,15 @@
+# Persists logs/reports across CronJob runs.
+# GKE Autopilot: uses standard-rwo storage class automatically.
+# Digital Ocean: uses do-block-storage.
+# Adjust storageClassName if your cluster uses a different provisioner.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: trading-agent-logs
+  namespace: trading-agent
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
