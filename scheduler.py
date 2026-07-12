@@ -94,7 +94,9 @@ def _build_watchlist() -> list[str]:
 
 
 def run_cycle(graph) -> None:
-    now = datetime.datetime.utcnow()
+    # Stamp cycles in ET so report/decision filenames line up with the ET
+    # trading schedule (a Fri 20:00 ET run should file under Fri, not Sat UTC).
+    now = datetime.datetime.now(tz=ZoneInfo("America/New_York"))
 
     watchlist = _build_watchlist()
     portfolio_positions = _fetch_alpaca_positions()
