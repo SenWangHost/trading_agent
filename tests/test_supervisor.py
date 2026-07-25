@@ -46,10 +46,10 @@ def test_run_supervisor_returns_decision():
         rationale="All three signals bullish",
     )
 
-    with patch("agents.supervisor.ChatAnthropic") as MockLLM:
-        mock_llm_instance = MagicMock()
-        mock_llm_instance.with_structured_output.return_value.invoke.return_value = fake_decision
-        MockLLM.return_value = mock_llm_instance
+    with patch("agents.supervisor.build_llm") as MockLLM:
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = fake_decision
+        MockLLM.return_value = mock_llm
 
         from agents.supervisor import run_supervisor
         result = run_supervisor(_make_state_with_signals())
@@ -61,10 +61,10 @@ def test_run_supervisor_returns_decision():
 
 
 def test_run_supervisor_holds_on_llm_failure():
-    with patch("agents.supervisor.ChatAnthropic") as MockLLM:
-        mock_llm_instance = MagicMock()
-        mock_llm_instance.with_structured_output.return_value.invoke.side_effect = Exception("LLM error")
-        MockLLM.return_value = mock_llm_instance
+    with patch("agents.supervisor.build_llm") as MockLLM:
+        mock_llm = MagicMock()
+        mock_llm.invoke.side_effect = Exception("LLM error")
+        MockLLM.return_value = mock_llm
 
         from agents.supervisor import run_supervisor
         result = run_supervisor(_make_state_with_signals())
@@ -91,10 +91,10 @@ def test_run_supervisor_handles_missing_signals():
         ticker="AAPL", action="hold", size_pct=0.0, rationale="Insufficient data",
     )
 
-    with patch("agents.supervisor.ChatAnthropic") as MockLLM:
-        mock_llm_instance = MagicMock()
-        mock_llm_instance.with_structured_output.return_value.invoke.return_value = fake_decision
-        MockLLM.return_value = mock_llm_instance
+    with patch("agents.supervisor.build_llm") as MockLLM:
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = fake_decision
+        MockLLM.return_value = mock_llm
 
         from agents.supervisor import run_supervisor
         result = run_supervisor(state)
@@ -106,16 +106,15 @@ def test_run_supervisor_includes_position_context_in_prompt():
     """Verify that position data (avg cost, P&L) reaches the LLM prompt."""
     fake_decision = TradeDecision(ticker="AAPL", action="hold", size_pct=0.0, rationale="ok")
 
-    with patch("agents.supervisor.ChatAnthropic") as MockLLM:
-        mock_llm_instance = MagicMock()
-        structured = mock_llm_instance.with_structured_output.return_value
-        structured.invoke.return_value = fake_decision
-        MockLLM.return_value = mock_llm_instance
+    with patch("agents.supervisor.build_llm") as MockLLM:
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = fake_decision
+        MockLLM.return_value = mock_llm
 
         from agents.supervisor import run_supervisor
         run_supervisor(_make_state_with_signals())
 
-        prompt_arg = structured.invoke.call_args[0][0]
+        prompt_arg = mock_llm.invoke.call_args[0][0]
 
     assert "170.00" in prompt_arg   # avg cost
     assert "1950.00" in prompt_arg  # current value

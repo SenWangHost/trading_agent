@@ -1,7 +1,6 @@
 import logging
 
-from langchain_anthropic import ChatAnthropic
-
+from llm import build_llm
 from state import AgentState, FundamentalSignal, NewsSignal, PortfolioPosition, RecentOrder, TechnicalSignal, TradeDecision
 
 log = logging.getLogger(__name__)
@@ -20,7 +19,7 @@ def run_supervisor(state: AgentState) -> dict:
         pos = portfolio_positions.get(ticker)
         ticker_orders = [o for o in recent_orders if o.ticker == ticker]
         try:
-            llm = ChatAnthropic(model="claude-sonnet-4-6").with_structured_output(TradeDecision)
+            llm = build_llm(TradeDecision)
             decision = llm.invoke(_build_prompt(ticker, tech, fund, news, pos, ticker_orders))
             log.info("supervisor %s → %s %.1f%%", ticker, decision.action, decision.size_pct)
         except Exception as e:

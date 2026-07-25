@@ -4,8 +4,8 @@ import os
 
 import polygon_client
 import yfinance as yf
-from langchain_anthropic import ChatAnthropic
 
+from llm import build_llm
 from state import AgentState, FundamentalSignal
 
 _POLYGON_BASE = "https://api.polygon.io"
@@ -24,7 +24,7 @@ def run_fundamental(state: AgentState) -> dict:
     log.info("%s fundamental → start", ticker)
     try:
         summary = _fetch_and_format(ticker) + "\n" + _earnings_calendar(ticker)
-        llm = ChatAnthropic(model="claude-sonnet-4-6").with_structured_output(FundamentalSignal)
+        llm = build_llm(FundamentalSignal)
         signal = llm.invoke(
             f"Analyze these fundamental metrics for {ticker} and return a structured signal.\n"
             f"Note: pe_ratio and pb_ratio require current price which is not available here — set both to null. "

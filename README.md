@@ -1,6 +1,6 @@
 # Trading Agent
 
-An AI-powered swing trading agent for US stocks and ETFs. Uses LangGraph to orchestrate parallel per-ticker analysis, synthesizes signals via Claude, and executes trades through Alpaca.
+An AI-powered swing trading agent for US stocks and ETFs. Uses LangGraph to orchestrate parallel per-ticker analysis, synthesizes signals via an LLM (DeepSeek V4 Pro over OpenRouter), and executes trades through Alpaca.
 
 ## Setup
 
@@ -50,7 +50,7 @@ batch job (no inbound web traffic), so a 1 GB / 1 vCPU Basic droplet is enough.
       (`.env.*`), so they are **not** included by `git clone`. Copy the file to
       the droplet over SSH, then move it into place:
       `scp .env.prod root@DROPLET_IP:/root/trading_agent/.env`
-- [ ] **`.env` values filled** — `ANTHROPIC_API_KEY`, `POLYGON_API_KEY`,
+- [ ] **`.env` values filled** — `OPENROUTER_API_KEY`, `POLYGON_API_KEY`,
       `ALPACA_API_KEY`, `ALPACA_SECRET_KEY`, `ALPACA_BASE_URL`, `WATCHLIST`
       (+ scanner vars if used). See the table below.
 - [ ] **Paper vs live confirmed** — `ALPACA_BASE_URL=https://paper-api.alpaca.markets`
@@ -74,7 +74,8 @@ To update after a code change: `git pull` → rebuild the image → `docker comp
 
 | Variable | Description |
 |---|---|
-| `ANTHROPIC_API_KEY` | Claude API key (LLM calls) |
+| `OPENROUTER_API_KEY` | OpenRouter API key — all LLM calls |
+| `LLM_MODEL` | OpenRouter model id (default `deepseek/deepseek-v4-pro`) |
 | `POLYGON_API_KEY` | Polygon.io — all market data (bars, fundamentals, news, scanner) |
 | `ALPACA_API_KEY` | Alpaca API key |
 | `ALPACA_SECRET_KEY` | Alpaca secret key |

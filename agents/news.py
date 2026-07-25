@@ -2,10 +2,9 @@ import logging
 import os
 from datetime import datetime, timedelta
 
-from langchain_anthropic import ChatAnthropic
-
 import polygon_client
 
+from llm import build_llm
 from state import AgentState, NewsSignal
 
 _POLYGON_BASE = "https://api.polygon.io"
@@ -19,7 +18,7 @@ def run_news(state: AgentState) -> dict:
         articles = _fetch(ticker)
         log.info("%s news → %d articles fetched", ticker, len(articles))
         summary = _format(ticker, articles)
-        llm = ChatAnthropic(model="claude-sonnet-4-6").with_structured_output(NewsSignal)
+        llm = build_llm(NewsSignal)
         signal = llm.invoke(
             f"Analyze these recent news items for {ticker} and return a structured sentiment signal.\n\n{summary}"
         )

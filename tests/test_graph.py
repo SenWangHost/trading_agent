@@ -114,10 +114,10 @@ def test_graph_full_cycle_generates_report():
 
     with patch("requests.get", side_effect=_dispatch_polygon_get), \
          patch("agents.fundamental.yf") as mock_yf, \
-         patch("agents.technical.ChatAnthropic") as MockTechLLM, \
-         patch("agents.fundamental.ChatAnthropic") as MockFundLLM, \
-         patch("agents.news.ChatAnthropic") as MockNewsLLM, \
-         patch("agents.supervisor.ChatAnthropic") as MockSupLLM:
+         patch("agents.technical.build_llm") as MockTechLLM, \
+         patch("agents.fundamental.build_llm") as MockFundLLM, \
+         patch("agents.news.build_llm") as MockNewsLLM, \
+         patch("agents.supervisor.build_llm") as MockSupLLM:
 
         mock_yf.Ticker.return_value = mock_yf_ticker
 
@@ -159,5 +159,5 @@ def test_graph_full_cycle_generates_report():
 
 def _setup_llm(MockLLM, return_value):
     instance = MagicMock()
-    instance.with_structured_output.return_value.invoke.return_value = return_value
+    instance.invoke.return_value = return_value
     MockLLM.return_value = instance
