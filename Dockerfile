@@ -14,6 +14,7 @@ COPY agents/       agents/
 COPY broker/       broker/
 COPY scanner/      scanner/
 COPY graph.py      graph.py
+COPY llm.py        llm.py
 COPY main.py       main.py
 COPY polygon_client.py polygon_client.py
 COPY scheduler.py  scheduler.py
