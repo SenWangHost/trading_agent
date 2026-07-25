@@ -5,10 +5,10 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 import pandas_ta  # registers df.ta accessor
-from langchain_anthropic import ChatAnthropic
 
 import polygon_client
 
+from llm import build_llm
 from state import AgentState, TechnicalSignal
 
 _POLYGON_BASE = "https://api.polygon.io"
@@ -23,7 +23,7 @@ def run_technical(state: AgentState) -> dict:
         prev_close = float(df.iloc[-1]["close"])
         live_price = _fetch_snapshot_price(ticker, fallback=prev_close)
         summary = _compute_indicators(ticker, df, live_price)
-        llm = ChatAnthropic(model="claude-sonnet-4-6").with_structured_output(TechnicalSignal)
+        llm = build_llm(TechnicalSignal)
         signal = llm.invoke(
             f"Analyze these technical indicators for {ticker} and return a structured signal.\n\n{summary}"
         )

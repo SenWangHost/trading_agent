@@ -82,9 +82,9 @@ def test_run_fundamental_returns_signal():
 
     with patch("polygon_client.requests.get", side_effect=_mock_polygon_get), \
          patch("agents.fundamental.yf", _mock_yf_calendar()), \
-         patch("agents.fundamental.ChatAnthropic") as MockLLM:
+         patch("agents.fundamental.build_llm") as MockLLM:
         mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.invoke.return_value = fake_signal
+        mock_llm.invoke.return_value = fake_signal
         MockLLM.return_value = mock_llm
 
         from agents.fundamental import run_fundamental
@@ -104,16 +104,15 @@ def test_run_fundamental_includes_earnings_in_prompt():
 
     with patch("polygon_client.requests.get", side_effect=_mock_polygon_get), \
          patch("agents.fundamental.yf", _mock_yf_calendar()), \
-         patch("agents.fundamental.ChatAnthropic") as MockLLM:
+         patch("agents.fundamental.build_llm") as MockLLM:
         mock_llm = MagicMock()
-        chain = mock_llm.with_structured_output.return_value
-        chain.invoke.return_value = fake_signal
+        mock_llm.invoke.return_value = fake_signal
         MockLLM.return_value = mock_llm
 
         from agents.fundamental import run_fundamental
         run_fundamental(_make_state())
 
-    prompt_text = chain.invoke.call_args[0][0]
+    prompt_text = mock_llm.invoke.call_args[0][0]
     assert "Earnings Calendar" in prompt_text
     assert "2026-07-30" in prompt_text
 
@@ -131,7 +130,7 @@ def test_run_fundamental_uses_cache_on_second_call():
 
     with patch("polygon_client.requests.get") as mock_get, \
          patch("agents.fundamental.yf") as mock_yf, \
-         patch("agents.fundamental.ChatAnthropic"):
+         patch("agents.fundamental.build_llm"):
         result = mod.run_fundamental(_make_state())
         mock_get.assert_not_called()
         mock_yf.Ticker.assert_not_called()
@@ -144,7 +143,7 @@ def test_run_fundamental_uses_cache_on_second_call():
 def test_run_fundamental_returns_neutral_on_failure():
     with patch("polygon_client.requests.get") as mock_get, \
          patch("agents.fundamental.yf"), \
-         patch("agents.fundamental.ChatAnthropic"):
+         patch("agents.fundamental.build_llm"):
         mock_get.side_effect = Exception("timeout")
 
         from agents.fundamental import run_fundamental

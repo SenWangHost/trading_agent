@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-An AI-powered swing trading agent for US stocks and ETFs. Uses LangGraph to orchestrate parallel per-ticker analysis (technical, fundamental, news/sentiment), synthesizes signals via Claude, executes trades via Alpaca paper/live broker, and generates a markdown report each cycle. A Polygon-based stock scanner automatically expands the watchlist beyond the static list.
+An AI-powered swing trading agent for US stocks and ETFs. Uses LangGraph to orchestrate parallel per-ticker analysis (technical, fundamental, news/sentiment), synthesizes signals via an LLM (DeepSeek V4 Pro over OpenRouter), executes trades via Alpaca paper/live broker, and generates a markdown report each cycle. A Polygon-based stock scanner automatically expands the watchlist beyond the static list.
 
 ## Setup
 
@@ -72,7 +72,8 @@ All market data comes from a single provider (Polygon.io). Broker operations use
 See `.env.prod` for all required keys. Critical ones:
 - `POLYGON_API_KEY` — all market data (bars, fundamentals, news, scanner)
 - `ALPACA_API_KEY` / `ALPACA_SECRET_KEY` / `ALPACA_BASE_URL` — broker (positions + trading)
-- `ANTHROPIC_API_KEY` — LLM calls (model: `claude-sonnet-4-6`)
+- `OPENROUTER_API_KEY` — all LLM calls (OpenAI-compatible, routed through OpenRouter)
+- `LLM_MODEL` — OpenRouter model id (default: `deepseek/deepseek-v4-pro`, set in `llm.py`)
 - `SCANNER_ENABLED` — set `true` to auto-expand watchlist (default: `false`)
 - `SCANNER_MAX_RESULTS` — max tickers added by scanner (default: `10`)
 - `SCANNER_MIN_PRICE` — exclude stocks below this price (default: `10`)

@@ -61,10 +61,10 @@ def test_run_technical_returns_signal():
     ])
 
     with patch("polygon_client.requests.get", mock_get), \
-         patch("agents.technical.ChatAnthropic") as MockLLM:
+         patch("agents.technical.build_llm") as MockLLM:
 
         mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.invoke.return_value = fake_signal
+        mock_llm.invoke.return_value = fake_signal
         MockLLM.return_value = mock_llm
 
         from agents.technical import run_technical
@@ -79,7 +79,7 @@ def test_run_technical_returns_signal():
 
 def test_run_technical_returns_neutral_on_api_failure():
     with patch("polygon_client.requests.get") as mock_get, \
-         patch("agents.technical.ChatAnthropic"):
+         patch("agents.technical.build_llm"):
         mock_get.side_effect = Exception("API down")
 
         from agents.technical import run_technical

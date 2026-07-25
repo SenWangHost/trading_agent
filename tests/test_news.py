@@ -53,10 +53,10 @@ def test_run_news_returns_signal():
     )
 
     with patch("polygon_client.requests.get", return_value=_mock_get(_make_news_response())), \
-         patch("agents.news.ChatAnthropic") as MockLLM:
+         patch("agents.news.build_llm") as MockLLM:
 
         mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.invoke.return_value = fake_signal
+        mock_llm.invoke.return_value = fake_signal
         MockLLM.return_value = mock_llm
 
         from agents.news import run_news
@@ -69,7 +69,7 @@ def test_run_news_returns_signal():
 
 def test_run_news_returns_neutral_on_api_failure():
     with patch("polygon_client.requests.get") as mock_get, \
-         patch("agents.news.ChatAnthropic"):
+         patch("agents.news.build_llm"):
         mock_get.side_effect = Exception("connection refused")
 
         from agents.news import run_news
